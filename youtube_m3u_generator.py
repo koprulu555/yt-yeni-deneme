@@ -5,42 +5,25 @@ import requests
 import re
 import json
 import os
-from urllib.parse import unquote, quote
+from urllib.parse import unquote
 import html
 import time
 import random
 
 def links_dosyasini_oku():
-    """links.txt dosyasını GitHub raw linkinden oku ve kanal listesini döndür"""
+    """links.txt dosyasını GitHub raw linkinden oku"""
     kanallar = []
     
-    raw_url = "https://raw.githubusercontent.com/koprulu555/yt-streams/refs/heads/main/links.txt"
-    
     try:
-        response = requests.get(raw_url, timeout=10)
-        if response.status_code == 200:
-            icerik = response.text
-            print("✅ links.txt dosyası GitHub'dan okundu")
-        else:
-            print(f"❌ links.txt dosyası GitHub'dan indirilemedi! Hata kodu: {response.status_code}")
-            # Fallback olarak yerel dosyayı dene
-            try:
-                with open('links.txt', 'r', encoding='utf-8') as dosya:
-                    icerik = dosya.read()
-                    print("✅ links.txt dosyası yerelden okundu (fallback)")
-            except FileNotFoundError:
-                print("❌ links.txt dosyası bulunamadı!")
-                return kanallar
-    except Exception as e:
-        print(f"❌ GitHub bağlantı hatası: {e}")
-        # Fallback olarak yerel dosyayı dene
-        try:
+        response = requests.get("https://raw.githubusercontent.com/koprulu555/yt-streams/refs/heads/main/links.txt", timeout=10)
+        icerik = response.text if response.status_code == 200 else ""
+        
+        if not icerik:
             with open('links.txt', 'r', encoding='utf-8') as dosya:
                 icerik = dosya.read()
-                print("✅ links.txt dosyası yerelden okundu (fallback)")
-        except FileNotFoundError:
-            print("❌ links.txt dosyası bulunamadı!")
-            return kanallar
+    except:
+        with open('links.txt', 'r', encoding='utf-8') as dosya:
+            icerik = dosya.read()
     
     satirlar = icerik.split('\n')
     mevcut_kanal = {}
@@ -66,7 +49,7 @@ def links_dosyasini_oku():
     print(f"📊 {len(kanallar)} kanal bulundu")
     return kanallar
 
-# Rastgele User-Agent listesi (Workers'daki gibi)
+# Workers'daki userAgents listesinin aynısı
 user_agents = [
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
@@ -74,40 +57,43 @@ user_agents = [
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
     'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1',
+    'Mozilla/5.0 (iPad; CPU OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1',
     'Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.6099.210 Mobile Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.2210.91'
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.2210.91',
+    'Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 ]
 
 def get_random_user_agent():
-    """Rastgele User-Agent döndür"""
     return random.choice(user_agents)
 
+# Workers'daki decodeUnicodeEscapes fonksiyonunun birebir karşılığı
 def decode_unicode_escapes(text):
-    """Workers'daki decodeUnicodeEscapes fonksiyonunun Python versiyonu"""
-    try:
-        # Unicode escape'leri decode et (\u0068 -> h)
-        def replace_unicode(match):
-            try:
-                return chr(int(match.group(1), 16))
-            except:
-                return match.group(0)
-        
-        # İlk olarak \uXXXX formatını decode et
-        result = re.sub(r'\\u([0-9a-fA-F]{4})', replace_unicode, text)
-        
-        # HTML entity'leri decode et
-        result = html.unescape(result)
-        
-        # Diğer escape karakterlerini temizle
-        result = result.replace('\\/', '/').replace('\\u0026', '&')
-        
-        return result
-    except Exception as e:
-        print(f"   ⚠️ Unicode decode hatası: {str(e)[:50]}")
-        return text
+    """Workers'daki decodeUnicodeEscapes'in tam karşılığı"""
+    def replace_unicode(match):
+        try:
+            return chr(int(match.group(1), 16))
+        except:
+            return match.group(0)
+    
+    # 1. \uXXXX formatını decode et
+    result = re.sub(r'\\u([0-9a-fA-F]{4})', replace_unicode, text)
+    
+    # 2. HTML entity'leri decode et
+    result = html.unescape(result)
+    
+    # 3. Diğer escape'leri temizle
+    result = result.replace('\\/', '/').replace('\\u0026', '&')
+    
+    # 4. \x22 (") karakterlerini decode et
+    result = re.sub(r'\\x22', '"', result)
+    
+    # 5. \\\ karakterlerini temizle
+    result = result.replace('\\\\', '\\')
+    
+    return result
 
 def get_youtube_page(url):
-    """YouTube sayfasını doğrudan çek (Workers mantığı)"""
+    """Workers'daki fetch mantığı"""
     headers = {
         'User-Agent': get_random_user_agent(),
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
@@ -125,22 +111,16 @@ def get_youtube_page(url):
     }
     
     try:
-        print(f"   🔄 YouTube sayfasına doğrudan bağlanılıyor...")
         response = requests.get(url, headers=headers, timeout=15)
-        
         if response.status_code == 200:
-            print(f"   ✅ Sayfa başarıyla alındı: {len(response.text)} byte")
             return response.text
-        else:
-            print(f"   ❌ HTTP hatası: {response.status_code}")
-            return None
-            
-    except Exception as e:
-        print(f"   ❌ Bağlantı hatası: {str(e)[:100]}")
-        return None
+    except:
+        pass
+    return None
 
-def extract_hls_url_workers_style(html_content):
-    """Workers'daki 6 katmanlı HLS URL çıkarma mantığı"""
+# Workers'daki extractHlsManifestUrl fonksiyonunun 6 katmanlı araması
+def extract_hls_url_workers(html_content):
+    """Workers'daki 6 katmanlı aramanın birebir uygulaması"""
     if not html_content:
         return None
     
@@ -149,18 +129,15 @@ def extract_hls_url_workers_style(html_content):
     
     # 1. KATMAN: Doğrudan düz metinde ara
     direct_regex = r'"hlsManifestUrl"\s*:\s*"([^"]+?\.m3u8[^"]*)"'
-    match = re.search(direct_regex, decoded_html, re.IGNORECASE)
+    match = re.search(direct_regex, decoded_html, re.IGNORECASE | re.DOTALL)
     if match and match[1]:
         url = decode_unicode_escapes(match[1])
         url = url.replace('\\/', '/').replace('\\u0026', '&')
-        try:
-            return unquote(url)
-        except:
-            return url
+        return unquote(url)
     
     # 2. KATMAN: streamingData objesi içinde ara
     streaming_data_regex = r'"streamingData"\s*:\s*({[^}]+(?:{[^}]+})?[^}]+})'
-    match = re.search(streaming_data_regex, decoded_html, re.IGNORECASE)
+    match = re.search(streaming_data_regex, decoded_html, re.IGNORECASE | re.DOTALL)
     if match and match[1]:
         try:
             streaming_data_str = match[1]
@@ -169,36 +146,30 @@ def extract_hls_url_workers_style(html_content):
             if hls_match and hls_match[1]:
                 url = decode_unicode_escapes(hls_match[1])
                 url = url.replace('\\/', '/').replace('\\u0026', '&')
-                try:
-                    return unquote(url)
-                except:
-                    return url
-        except Exception as e:
+                return unquote(url)
+        except:
             pass
     
     # 3. KATMAN: player_response içinde ara
     player_response_regex = r'"player_response"\s*:\s*"([^"]+)"'
-    match = re.search(player_response_regex, decoded_html, re.IGNORECASE)
+    match = re.search(player_response_regex, decoded_html, re.IGNORECASE | re.DOTALL)
     if match and match[1]:
         try:
             player_response_str = unquote(match[1].replace('\\/', '/').replace('\\u0026', '&'))
             player_response_str = decode_unicode_escapes(player_response_str)
             
             hls_match = re.search(r'"hlsManifestUrl"\s*:\s*"([^"]+?\.m3u8[^"]*)"', 
-                                 player_response_str, re.IGNORECASE)
+                                 player_response_str, re.IGNORECASE | re.DOTALL)
             if hls_match and hls_match[1]:
                 url = decode_unicode_escapes(hls_match[1])
                 url = url.replace('\\/', '/').replace('\\u0026', '&')
-                try:
-                    return unquote(url)
-                except:
-                    return url
-        except Exception as e:
+                return unquote(url)
+        except:
             pass
     
     # 4. KATMAN: adaptive_fmts içinde ara
     adaptive_regex = r'"adaptive_fmts"\s*:\s*"([^"]+)"'
-    match = re.search(adaptive_regex, decoded_html, re.IGNORECASE)
+    match = re.search(adaptive_regex, decoded_html, re.IGNORECASE | re.DOTALL)
     if match and match[1]:
         try:
             adaptive_str = unquote(match[1].replace('\\/', '/').replace('\\u0026', '&'))
@@ -207,34 +178,23 @@ def extract_hls_url_workers_style(html_content):
             if url_match and url_match[0]:
                 url = decode_unicode_escapes(url_match[0])
                 url = url.replace('\\/', '/').replace('\\u0026', '&')
-                try:
-                    return unquote(url)
-                except:
-                    return url
-        except Exception as e:
+                return unquote(url)
+        except:
             pass
     
     # 5. KATMAN: Genel .m3u8 URL araması
     generic_m3u8_regex = r'(https?://[^"]+?\.m3u8[^"]*)'
     all_matches = re.findall(generic_m3u8_regex, decoded_html, re.IGNORECASE)
     if all_matches:
-        # manifest.googlevideo.com içerenleri tercih et
         for url_match in all_matches:
             if 'manifest.googlevideo.com' in url_match:
                 url = decode_unicode_escapes(url_match)
                 url = url.replace('\\/', '/').replace('\\u0026', '&')
-                try:
-                    return unquote(url)
-                except:
-                    return url
+                return unquote(url)
         
-        # Yoksa ilk .m3u8 URL'sini al
         url = decode_unicode_escapes(all_matches[0])
         url = url.replace('\\/', '/').replace('\\u0026', '&')
-        try:
-            return unquote(url)
-        except:
-            return url
+        return unquote(url)
     
     # 6. KATMAN: Ham HTML'de Unicode escaped anahtarda ara
     unicode_key_regex = r'\\u0068\\u006c\\u0073\\u004d\\u0061\\u006e\\u0069\\u0066\\u0065\\u0073\\u0074\\u0055\\u0072\\u006c":"([^"]+)"'
@@ -242,76 +202,12 @@ def extract_hls_url_workers_style(html_content):
     if match and match[1]:
         url = decode_unicode_escapes(match[1])
         url = url.replace('\\/', '/').replace('\\u0026', '&')
-        try:
-            return unquote(url)
-        except:
-            return url
+        return unquote(url)
     
     return None
 
-def fetch_hls_via_get_video_info(video_id):
-    """get_video_info endpoint'inden HLS URL'si çekme"""
-    url = f"https://www.youtube.com/get_video_info?video_id={video_id}"
-    
-    headers = {
-        'User-Agent': get_random_user_agent(),
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
-    }
-    
-    try:
-        print(f"   🔄 get_video_info deneniyor...")
-        response = requests.get(url, headers=headers, timeout=10)
-        
-        if response.status_code == 200:
-            text = response.text
-            
-            # URL-encoded parametrelerini parse et
-            params = {}
-            for param in text.split('&'):
-                if '=' in param:
-                    key, value = param.split('=', 1)
-                    params[key] = unquote(value)
-            
-            # hlsvp parametresini kontrol et
-            if 'hlsvp' in params and params['hlsvp']:
-                hls_url = params['hlsvp']
-                print(f"   ✅ get_video_info'den hlsvp bulundu")
-                return hls_url
-            
-            # adaptive_fmts içinde HLS URL'si ara
-            if 'adaptive_fmts' in params and params['adaptive_fmts']:
-                adaptive_fmts = params['adaptive_fmts']
-                decoded = unquote(adaptive_fmts)
-                m3u8_match = re.search(r'https?[^,]+\.m3u8[^,&]*', decoded, re.IGNORECASE)
-                if m3u8_match:
-                    print(f"   ✅ get_video_info'den adaptive_fmts bulundu")
-                    return m3u8_match[0]
-            
-            # player_response içinde hlsManifestUrl ara
-            if 'player_response' in params and params['player_response']:
-                try:
-                    player_json = json.loads(params['player_response'])
-                    if ('streamingData' in player_json and 
-                        'hlsManifestUrl' in player_json['streamingData'] and 
-                        player_json['streamingData']['hlsManifestUrl']):
-                        hls_url = player_json['streamingData']['hlsManifestUrl']
-                        print(f"   ✅ get_video_info'den player_response bulundu")
-                        return hls_url
-                except Exception as e:
-                    pass
-            
-            return None
-        else:
-            print(f"   ❌ get_video_info hatası: {response.status_code}")
-            return None
-            
-    except Exception as e:
-        print(f"   ⚠️ get_video_info bağlantı hatası: {str(e)[:50]}")
-        return None
-
-def extract_channel_id_from_html(html_content):
-    """HTML'den Channel ID çıkar"""
+def extract_channel_id(html_content):
+    """Workers'daki extractChannelIdFromHtml fonksiyonu"""
     decoded_html = decode_unicode_escapes(html_content)
     
     # 1. "channelId":"UC..." formatını ara
@@ -324,7 +220,15 @@ def extract_channel_id_from_html(html_content):
     
     # 2. "videoDetails":{"channelId":"UC..."
     video_details_regex = r'"videoDetails"\s*:\s*{[^}]*"channelId"\s*:\s*"([^"]+)"'
-    match = re.search(video_details_regex, decoded_html, re.IGNORECASE)
+    match = re.search(video_details_regex, decoded_html, re.IGNORECASE | re.DOTALL)
+    if match and match[1]:
+        channel_id = match[1]
+        if re.match(r'^UC[a-zA-Z0-9_-]{22,}$', channel_id):
+            return channel_id
+    
+    # 3. Alternate pattern: \x22channelId\x22:\x22UC...\x22
+    alt_regex = r'\\x22channelId\\x22:\\x22([^\\]+)\\x22'
+    match = re.search(alt_regex, html_content)
     if match and match[1]:
         channel_id = match[1]
         if re.match(r'^UC[a-zA-Z0-9_-]{22,}$', channel_id):
@@ -332,56 +236,39 @@ def extract_channel_id_from_html(html_content):
     
     return None
 
-def get_hls_url_workers_style(youtube_url):
-    """Workers mantığıyla HLS URL'sini al"""
+def get_hls_url(youtube_url):
+    """Workers'daki ana mantığın birebir uygulaması"""
     try:
-        # Video ID'yi çıkar
         video_id = None
-        video_patterns = [
+        patterns = [
             r'(?:v=|youtu\.be/|embed/)([a-zA-Z0-9_-]{11})',
             r'youtube\.com/watch\?.*v=([a-zA-Z0-9_-]{11})',
             r'youtube\.com/embed/([a-zA-Z0-9_-]{11})'
         ]
         
-        for pattern in video_patterns:
+        for pattern in patterns:
             match = re.search(pattern, youtube_url)
             if match:
                 video_id = match.group(1)
                 break
         
         if not video_id:
-            print(f"   ❌ Video ID bulunamadı: {youtube_url}")
             return None
         
         print(f"   📹 Video ID: {video_id}")
         
-        # İlk olarak get_video_info dene (Workers'daki gibi)
-        hls_url = fetch_hls_via_get_video_info(video_id)
-        if hls_url:
-            return hls_url
-        
-        # 1. Embed sayfasını dene
-        embed_url = f"https://www.youtube.com/embed/{video_id}"
-        print(f"   🔄 Embed sayfası deneniyor: {embed_url}")
-        html_content = get_youtube_page(embed_url)
-        
-        if html_content:
-            hls_url = extract_hls_url_workers_style(html_content)
-            if hls_url:
-                return hls_url
-        
-        # 2. Watch sayfasını dene
+        # Önce watch sayfasını dene
         watch_url = f"https://www.youtube.com/watch?v={video_id}"
         print(f"   🔄 Watch sayfası deneniyor: {watch_url}")
         html_content = get_youtube_page(watch_url)
         
         if html_content:
-            hls_url = extract_hls_url_workers_style(html_content)
+            hls_url = extract_hls_url_workers(html_content)
             if hls_url:
                 return hls_url
             
-            # Eğer HLS bulunamazsa, channel ID'yi çıkar ve kanal sayfasını dene
-            channel_id = extract_channel_id_from_html(html_content)
+            # Channel ID'yi çıkar ve kanal sayfasını dene
+            channel_id = extract_channel_id(html_content)
             if channel_id:
                 print(f"   📺 Channel ID bulundu: {channel_id}")
                 channel_url = f"https://www.youtube.com/channel/{channel_id}/live"
@@ -389,105 +276,77 @@ def get_hls_url_workers_style(youtube_url):
                 channel_html = get_youtube_page(channel_url)
                 
                 if channel_html:
-                    channel_hls_url = extract_hls_url_workers_style(channel_html)
+                    channel_hls_url = extract_hls_url_workers(channel_html)
                     if channel_hls_url:
                         return channel_hls_url
         
-        # Son çare olarak tekrar get_video_info dene
-        return fetch_hls_via_get_video_info(video_id)
+        # Embed sayfasını dene
+        embed_url = f"https://www.youtube.com/embed/{video_id}"
+        print(f"   🔄 Embed sayfası deneniyor: {embed_url}")
+        html_content = get_youtube_page(embed_url)
+        
+        if html_content:
+            return extract_hls_url_workers(html_content)
+        
+        return None
         
     except Exception as e:
-        print(f"   ❌ Workers yöntemi hatası: {str(e)[:100]}")
+        print(f"   ❌ Hata: {str(e)[:100]}")
         return None
 
 def m3u_dosyasi_olustur(kanallar):
-    """M3U dosyasını oluştur (EPG satırı olmadan)"""
-    m3u_icerik = "#EXTM3U\n"  # EPG satırı kaldırıldı
-    basarili_kanallar = 0
+    """EPG olmadan M3U oluştur"""
+    m3u_icerik = "#EXTM3U\n"
+    basarili = 0
     
     for kanal in kanallar:
         if 'hls_url' in kanal and kanal['hls_url']:
-            # URL'yi temizle
             hls_url = kanal['hls_url'].strip()
-            if '\\' in hls_url:
-                hls_url = hls_url.replace('\\', '')
-            
-            # HLS URL'sine referer ve user-agent ekle (orijinal script'teki gibi)
-            if hls_url.startswith('http'):
-                m3u_icerik += f'#EXTINF:-1 tvg-id="{kanal["isim"]}" tvg-name="{kanal["isim"]}" tvg-logo="{kanal["logo"]}" group-title="YouTube",{kanal["isim"]}\n'
-                m3u_icerik += f'{hls_url}\n'
-                basarili_kanallar += 1
-                print(f"   ✅ {kanal['isim']} - HLS URL eklendi")
+            m3u_icerik += f'#EXTINF:-1 tvg-id="{kanal["isim"]}" tvg-name="{kanal["isim"]}" tvg-logo="{kanal["logo"]}" group-title="YouTube",{kanal["isim"]}\n'
+            m3u_icerik += f'{hls_url}\n'
+            basarili += 1
+            print(f"   ✅ {kanal['isim']}")
     
-    try:
-        with open('youtube.m3u', 'w', encoding='utf-8') as dosya:
-            dosya.write(m3u_icerik)
-        print(f"✅ youtube.m3u dosyası oluşturuldu ({basarili_kanallar} kanal)")
-        return basarili_sayisi
-    except Exception as e:
-        print(f"❌ M3U dosyası yazılamadı: {e}")
-        return 0
+    with open('youtube.m3u', 'w', encoding='utf-8') as dosya:
+        dosya.write(m3u_icerik)
+    
+    return basarili
 
 def main():
     print("=" * 60)
-    print("🚀 YOUTUBE M3U GENERATOR - WORKERS MANTIĞI")
+    print("🚀 YOUTUBE M3U GENERATOR - WORKERS BİREBİR")
     print("=" * 60)
     
-    # 1. links.txt dosyasını oku
     kanallar = links_dosyasini_oku()
     if not kanallar:
-        print("❌ İşlem iptal edildi: Kanallar bulunamadı")
         return
     
-    # 2. Her kanal için HLS URL'sini al (Workers mantığıyla)
-    print("\n" + "=" * 60)
-    print("📡 HLS URL'LERİ ALINIYOR (WORKERS MANTIĞI)...")
-    print("=" * 60)
+    print("\n📡 HLS URL'LERİ ALINIYOR...")
     
     for idx, kanal in enumerate(kanallar, 1):
-        print(f"\n🎬 [{idx}/{len(kanallar)}] KANAL: {kanal['isim']}")
-        print(f"   🔗 URL: {kanal['icerik'][:80]}...")
+        print(f"\n🎬 [{idx}/{len(kanallar)}] {kanal['isim']}")
         
-        hls_url = get_hls_url_workers_style(kanal['icerik'])
+        hls_url = get_hls_url(kanal['icerik'])
         
         if hls_url:
             kanal['hls_url'] = hls_url
-            print(f"   ✅ BAŞARILI - HLS URL: {hls_url[:100]}...")
+            print(f"   ✅ {hls_url[:100]}...")
         else:
             kanal['hls_url'] = None
-            print(f"   ❌ BAŞARISIZ - HLS URL bulunamadı")
+            print(f"   ❌ Bulunamadı")
         
-        # Rate limiting önlemi
-        if idx < len(kanallar):
-            time.sleep(1)
+        time.sleep(0.5)
     
-    # 3. M3U dosyasını oluştur
-    print("\n" + "=" * 60)
-    print("📝 M3U DOSYASI OLUŞTURULUYOR...")
-    print("=" * 60)
+    print("\n📝 M3U OLUŞTURULUYOR...")
+    basarili = m3u_dosyasi_olustur(kanallar)
     
-    basarili_sayisi = m3u_dosyasi_olustur(kanallar)
+    print(f"\n✅ Başarılı: {basarili}")
+    print(f"❌ Başarısız: {len(kanallar) - basarili}")
     
-    # 4. Sonuçları göster
-    print("\n" + "=" * 60)
-    print("🎉 SONUÇLAR")
-    print("=" * 60)
-    print(f"📊 Toplam Kanal: {len(kanallar)}")
-    print(f"✅ Başarılı: {basarili_sayisi}")
-    print(f"❌ Başarısız: {len(kanallar) - basarili_sayisi}")
-    
-    # Başarısız kanalları listele
-    basarisiz_kanallar = [k['isim'] for k in kanallar if not k.get('hls_url')]
-    if basarisiz_kanallar:
-        print(f"\n⚠️  BAŞARISIZ KANALLAR:")
-        for isim in basarisiz_kanallar:
-            print(f"   - {isim}")
-    
-    if basarili_sayisi > 0:
-        print("\n🎉 YOUTUBE.M3U DOSYASI BAŞARIYLA OLUŞTURULDU!")
-        print("📁 'youtube.m3u' dosyasını kontrol edin")
+    if basarili > 0:
+        print(f"\n🎉 youtube.m3u oluşturuldu!")
     else:
-        print("\n⚠️  HİÇBİR KANAL İÇİN HLS URL'Sİ BULUNAMADI!")
+        print(f"\n⚠️  HLS URL bulunamadı!")
 
 if __name__ == "__main__":
     main()
