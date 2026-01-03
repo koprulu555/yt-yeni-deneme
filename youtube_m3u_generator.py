@@ -12,7 +12,7 @@ def links_dosyasini_oku():
     """links.txt dosyasını GitHub raw linkinden oku ve kanal listesini döndür"""
     kanallar = []
     
-    raw_url = "https://raw.githubusercontent.com/koprulu555/yt-streams/refs/heads/main/links.txt"
+    raw_url = "https://raw.githubusercontent.com/koprulu555/yt-yeni-deneme/refs/heads/main/links.txt"
     
     try:
         response = requests.get(raw_url, timeout=10)
